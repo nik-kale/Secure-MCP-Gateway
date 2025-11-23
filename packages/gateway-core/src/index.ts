@@ -23,3 +23,9 @@ export {
   type GatewayConfig,
   type GatewayCallResult,
 } from './gateway.js';
+
+// Error Classes
+export * from './errors.js';
+
+// Validation Utilities
+export * from './validation.js';
