@@ -11,6 +11,7 @@ import {
   PolicyDecision,
   CallerIdentity,
 } from './types.js';
+import { redactSensitiveFields } from './validation.js';
 
 /**
  * Configuration for audit logger.
@@ -64,11 +65,18 @@ export class AuditLogger implements IAuditLogger {
    * Log a tool call with its policy decision.
    */
   public async logToolCall(context: ToolCallContext, decision: PolicyDecision): Promise<void> {
+    // Redact sensitive fields from context before logging
+    const redactedContext = {
+      ...context,
+      args: context.args ? redactSensitiveFields(context.args) : undefined,
+      metadata: context.metadata ? redactSensitiveFields(context.metadata) : undefined,
+    };
+
     const entry: AuditLogEntry = {
       entryId: uuidv4(),
       timestamp: new Date(),
       eventType: 'tool_call',
-      context,
+      context: redactedContext,
       decision,
     };
 
@@ -78,7 +86,7 @@ export class AuditLogger implements IAuditLogger {
       entryId: uuidv4(),
       timestamp: new Date(),
       eventType: 'policy_decision',
-      context,
+      context: redactedContext,
       decision,
     };
 
@@ -131,14 +139,25 @@ export class AuditLogger implements IAuditLogger {
    * Log successful execution of a tool call.
    */
   public async logExecutionSuccess(context: ToolCallContext, output?: unknown): Promise<void> {
+    // Redact sensitive fields from output
+    const redactedOutput = output && typeof output === 'object'
+      ? redactSensitiveFields(output)
+      : output;
+
+    const redactedContext = {
+      ...context,
+      args: context.args ? redactSensitiveFields(context.args) : undefined,
+      metadata: context.metadata ? redactSensitiveFields(context.metadata) : undefined,
+    };
+
     const entry: AuditLogEntry = {
       entryId: uuidv4(),
       timestamp: new Date(),
       eventType: 'execution_success',
-      context,
+      context: redactedContext,
       result: {
         success: true,
-        output,
+        output: redactedOutput,
       },
     };
 
