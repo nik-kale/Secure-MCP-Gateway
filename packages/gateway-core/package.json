@@ -1,0 +1,21 @@
+{
+  "name": "@secure-mcp-gateway/core",
+  "version": "0.1.0",
+  "description": "Core policy engine, audit logging, and approval flow for Secure-MCP-Gateway",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist",
+    "test": "echo \"Tests coming soon\""
+  },
+  "dependencies": {
+    "yaml": "^2.3.4",
+    "uuid": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.7",
+    "typescript": "^5.3.3"
+  }
+}

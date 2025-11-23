@@ -1,0 +1,43 @@
+{
+  "rules": [
+    {
+      "id": "deny-critical-delete",
+      "description": "Deny all critical delete operations",
+      "match": {
+        "action": "delete_*",
+        "minSeverity": "critical"
+      },
+      "effect": "deny",
+      "reason": "Critical delete operations are not allowed"
+    },
+    {
+      "id": "review-high-risk",
+      "description": "Require human approval for high-risk operations",
+      "match": {
+        "minSeverity": "high"
+      },
+      "effect": "review",
+      "reason": "High-risk operations require human approval for safety"
+    },
+    {
+      "id": "review-medium-writes",
+      "description": "Require approval for medium-risk write operations",
+      "match": {
+        "minSeverity": "medium"
+      },
+      "effect": "review",
+      "reason": "Medium-risk operations require human review"
+    },
+    {
+      "id": "allow-safe-reads",
+      "description": "Allow safe read-only operations",
+      "match": {
+        "minSeverity": "safe"
+      },
+      "effect": "allow",
+      "reason": "Safe read-only operation approved"
+    }
+  ],
+  "defaultEffect": "review",
+  "defaultReason": "Unclassified operation requires review by default"
+}
