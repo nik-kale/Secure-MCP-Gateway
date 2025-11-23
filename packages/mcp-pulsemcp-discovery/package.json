@@ -1,0 +1,25 @@
+{
+  "name": "@secure-mcp-gateway/mcp-pulsemcp-discovery",
+  "version": "0.1.0",
+  "description": "Discovery tool for external MCP servers from directories like PulseMCP and awesome-mcp-servers",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mcp-pulsemcp-discovery": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/server.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@secure-mcp-gateway/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "node-fetch": "^3.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  }
+}

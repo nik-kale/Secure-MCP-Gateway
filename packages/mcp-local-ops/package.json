@@ -1,0 +1,24 @@
+{
+  "name": "@secure-mcp-gateway/mcp-local-ops",
+  "version": "0.1.0",
+  "description": "Local demo MCP server for incident simulations and autonomous operations",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "mcp-local-ops": "./dist/server.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/server.js",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@secure-mcp-gateway/core": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.0.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3"
+  }
+}

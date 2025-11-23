@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "local-ops": {
+      "command": "node",
+      "args": ["./packages/mcp-local-ops/dist/server.js"],
+      "env": {}
+    },
+    "jira-ops": {
+      "command": "node",
+      "args": ["./packages/mcp-jira-ops/dist/server.js"],
+      "env": {
+        "JIRA_URL": "https://yourcompany.atlassian.net",
+        "JIRA_EMAIL": "your-email@company.com",
+        "JIRA_TOKEN": "your-jira-api-token"
+      }
+    },
+    "pulsemcp-discovery": {
+      "command": "node",
+      "args": ["./packages/mcp-pulsemcp-discovery/dist/server.js"],
+      "env": {}
+    }
+  }
+}
