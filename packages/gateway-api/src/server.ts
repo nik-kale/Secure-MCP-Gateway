@@ -30,10 +30,58 @@ import { policyRoutes } from './routes/policy.js';
 import { metricsRoutes } from './routes/metrics.js';
 import { healthRoutes } from './routes/health.js';
 
+import { OIDCAuthProvider } from './auth/oidc.js';
+
 // Load environment variables
 config();
 
-// Configure logger
+// ... (logger setup)
+
+// Initialize gateway
+// ...
+
+// Create Express app
+const app: Express = express();
+const port = parseInt(process.env.PORT || '3000');
+
+// OIDC Setup
+if (process.env.OIDC_ISSUER) {
+  const oidcProvider = new OIDCAuthProvider({
+    issuerUrl: process.env.OIDC_ISSUER,
+    clientId: process.env.OIDC_CLIENT_ID || '',
+    clientSecret: process.env.OIDC_CLIENT_SECRET || '',
+    redirectUri: process.env.OIDC_REDIRECT_URI || `http://localhost:${port}/auth/callback`,
+    roleClaimPath: process.env.OIDC_ROLE_CLAIM,
+  });
+
+  oidcProvider.initialize()
+    .then(() => logger.info('OIDC Provider initialized'))
+    .catch(err => logger.error('Failed to initialize OIDC provider', err));
+
+  app.get('/auth/login', (req, res) => {
+    const state = Math.random().toString(36).substring(7); // Simple state for demo
+    const url = oidcProvider.getAuthorizationUrl(state);
+    res.redirect(url);
+  });
+
+  app.get('/auth/callback', async (req, res) => {
+    try {
+      const { identity, tokenSet } = await oidcProvider.handleCallback(req);
+      // In a real app, you would issue a JWT session cookie here
+      // For now, we return the info to confirm it works
+      res.json({ 
+        message: 'Authentication successful',
+        identity, 
+        // access_token: tokenSet.access_token 
+      });
+    } catch (error) {
+      logger.error('OIDC Callback error', error);
+      res.status(500).json({ error: 'Authentication failed' });
+    }
+  });
+}
+
+// Security middleware
 const logger = createLogger({
   level: process.env.LOG_LEVEL || 'info',
   format: format.combine(
