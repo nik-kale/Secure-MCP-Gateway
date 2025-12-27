@@ -17,6 +17,9 @@ export { AuditLogger, type IAuditLogger, type AuditLoggerConfig } from './audit-
 // Approval Manager
 export { ApprovalManager, type ApprovalManagerConfig } from './approval-manager.js';
 
+// Webhook Notifier
+export { WebhookNotifier, type WebhookConfig } from './webhook-notifier.js';
+
 // Gateway Orchestrator
 export {
   SecureMCPGateway,

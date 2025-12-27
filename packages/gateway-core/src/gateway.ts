@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { PolicyEngine } from './policy-engine.js';
 import { AuditLogger, IAuditLogger } from './audit-logger.js';
 import { ApprovalManager } from './approval-manager.js';
+import { WebhookNotifier } from './webhook-notifier.js';
 import {
   ToolCallContext,
   PolicyDecision,
@@ -45,6 +46,8 @@ export interface GatewayConfig {
   auditLogger?: IAuditLogger;
   /** Approval TTL in milliseconds */
   approvalTTL?: number;
+  /** Optional webhook notifier */
+  webhookNotifier?: WebhookNotifier;
 }
 
 /**
@@ -63,6 +66,7 @@ export class SecureMCPGateway {
     this.auditLogger = config.auditLogger || new AuditLogger();
     this.approvalManager = new ApprovalManager({
       defaultTTL: config.approvalTTL,
+      webhookNotifier: config.webhookNotifier,
     });
   }
 

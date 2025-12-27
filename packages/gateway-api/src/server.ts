@@ -21,6 +21,7 @@ import {
   GatewayError,
   isGatewayError,
   CallerIdentity,
+  WebhookNotifier,
 } from '@secure-mcp-gateway/core';
 import { authenticateRequest, AuthRequest } from './middleware/auth.js';
 import { approvalRoutes } from './routes/approvals.js';
@@ -52,9 +53,18 @@ const logger = createLogger({
 });
 
 // Initialize gateway
+// Webhook configuration
+const webhookConfig = process.env.WEBHOOK_URL ? {
+  url: process.env.WEBHOOK_URL,
+  events: (process.env.WEBHOOK_EVENTS?.split(',') as any) || ['pending', 'approved', 'denied', 'expired'],
+  secret: process.env.WEBHOOK_SECRET,
+  format: (process.env.WEBHOOK_FORMAT as any) || 'json',
+} : undefined;
+
 const gatewayConfig: GatewayConfig = {
   policy: createDefaultPolicy(),
   approvalTTL: parseInt(process.env.APPROVAL_TTL || '3600000'), // 1 hour default
+  webhookNotifier: webhookConfig ? new WebhookNotifier(webhookConfig) : undefined,
 };
 
 const gateway = new SecureMCPGateway(gatewayConfig);

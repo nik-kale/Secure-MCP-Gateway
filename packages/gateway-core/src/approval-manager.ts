@@ -2,6 +2,7 @@
  * Human-in-the-loop approval manager for review-flagged operations.
  */
 
+import { WebhookNotifier } from './webhook-notifier';
 import {
   PendingApproval,
   ApprovalResult,
@@ -16,6 +17,8 @@ import {
 export interface ApprovalManagerConfig {
   /** Default TTL for approvals in milliseconds (default: 1 hour) */
   defaultTTL?: number;
+  /** Optional webhook notifier */
+  webhookNotifier?: WebhookNotifier;
 }
 
 /**
@@ -24,12 +27,14 @@ export interface ApprovalManagerConfig {
 export class ApprovalManager {
   private pendingApprovals: Map<string, PendingApproval> = new Map();
   private config: ApprovalManagerConfig;
+  private notifier?: WebhookNotifier;
 
   constructor(config?: ApprovalManagerConfig) {
     this.config = {
       defaultTTL: 60 * 60 * 1000, // 1 hour
       ...config,
     };
+    this.notifier = config?.webhookNotifier;
   }
 
   /**
@@ -58,6 +63,13 @@ export class ApprovalManager {
     };
 
     this.pendingApprovals.set(decision.approvalToken, approval);
+
+    // Notify webhook
+    if (this.notifier) {
+      this.notifier.notify('pending', approval).catch(err => {
+        console.error('Failed to send pending approval webhook:', err);
+      });
+    }
 
     // Schedule automatic expiration
     setTimeout(() => {
@@ -111,6 +123,12 @@ export class ApprovalManager {
 
     approval.status = 'approved';
 
+    if (this.notifier) {
+      this.notifier.notify('approved', approval).catch(err => {
+        console.error('Failed to send approved webhook:', err);
+      });
+    }
+
     return {
       success: true,
       approval,
@@ -139,6 +157,12 @@ export class ApprovalManager {
 
     approval.status = 'denied';
 
+    if (this.notifier) {
+      this.notifier.notify('denied', approval).catch(err => {
+        console.error('Failed to send denied webhook:', err);
+      });
+    }
+
     return {
       success: true,
       approval,
@@ -152,6 +176,11 @@ export class ApprovalManager {
     const approval = this.pendingApprovals.get(token);
     if (approval && approval.status === 'pending') {
       approval.status = 'expired';
+      if (this.notifier) {
+        this.notifier.notify('expired', approval).catch(err => {
+          console.error('Failed to send expired webhook:', err);
+        });
+      }
     }
   }
 
