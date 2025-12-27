@@ -123,7 +123,7 @@ app.use((req: Request, res: Response, next: NextFunction) => {
 });
 
 // API Documentation - Swagger
-const swaggerDocument = YAML.load(path.join(__dirname, '../openapi.yml'));
+const swaggerDocument = YAML.load(path.join(__dirname, 'openapi.yml'));
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 // Health check routes (no auth required)

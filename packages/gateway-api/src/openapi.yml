@@ -1,0 +1,249 @@
+openapi: 3.0.3
+info:
+  title: Secure-MCP-Gateway API
+  version: 0.1.0
+  description: |
+    API for managing Secure Model Context Protocol (MCP) Gateway.
+    Provides endpoints for human-in-the-loop approvals, policy management, and system monitoring.
+  contact:
+    name: Secure-MCP-Gateway Maintainers
+    url: https://github.com/nik-kale/Secure-MCP-Gateway
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: /
+    description: Local Server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+    
+    PendingApproval:
+      type: object
+      properties:
+        token:
+          type: string
+          description: Unique approval token
+        status:
+          type: string
+          enum: [pending, approved, denied, expired]
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        context:
+          $ref: '#/components/schemas/ToolCallContext'
+        decision:
+          $ref: '#/components/schemas/PolicyDecision'
+
+    ToolCallContext:
+      type: object
+      properties:
+        callId:
+          type: string
+        tool:
+          type: string
+        action:
+          type: string
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        caller:
+          $ref: '#/components/schemas/CallerIdentity'
+        args:
+          type: object
+        timestamp:
+          type: string
+          format: date-time
+
+    CallerIdentity:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        metadata:
+          type: object
+
+    PolicyDecision:
+      type: object
+      properties:
+        effect:
+          type: string
+          enum: [allow, deny, review]
+        reason:
+          type: string
+        policyRuleId:
+          type: string
+        approvalToken:
+          type: string
+
+    ApprovalResult:
+      type: object
+      properties:
+        success:
+          type: boolean
+        approval:
+          $ref: '#/components/schemas/PendingApproval'
+        error:
+          type: string
+
+security:
+  - bearerAuth: []
+  - apiKeyAuth: []
+
+paths:
+  /health:
+    get:
+      summary: System health check
+      security: []
+      responses:
+        '200':
+          description: System is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  version:
+                    type: string
+                  uptime:
+                    type: number
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      security: []
+      responses:
+        '200':
+          description: Metrics in Prometheus format
+          content:
+            text/plain:
+              schema:
+                type: string
+
+  /api/v1/approvals/pending:
+    get:
+      summary: List pending approvals
+      tags: [Approvals]
+      responses:
+        '200':
+          description: List of pending approvals
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PendingApproval'
+
+  /api/v1/approvals/{token}:
+    get:
+      summary: Get approval details
+      tags: [Approvals]
+      parameters:
+        - in: path
+          name: token
+          schema:
+            type: string
+          required: true
+          description: Approval token
+      responses:
+        '200':
+          description: Approval details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PendingApproval'
+        '404':
+          description: Approval not found
+
+  /api/v1/approvals/{token}/approve:
+    post:
+      summary: Grant approval
+      tags: [Approvals]
+      parameters:
+        - in: path
+          name: token
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Approval granted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalResult'
+        '404':
+          description: Approval not found
+
+  /api/v1/approvals/{token}/deny:
+    post:
+      summary: Deny approval
+      tags: [Approvals]
+      parameters:
+        - in: path
+          name: token
+          schema:
+            type: string
+          required: true
+      responses:
+        '200':
+          description: Approval denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApprovalResult'
+
+  /api/v1/policy:
+    get:
+      summary: Get current policy configuration
+      tags: [Policy]
+      responses:
+        '200':
+          description: Current policy
+          content:
+            application/json:
+              schema:
+                type: object
+    put:
+      summary: Update policy configuration
+      tags: [Policy]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Policy updated
+
