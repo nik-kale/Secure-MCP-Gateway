@@ -28,9 +28,11 @@ const SEVERITY_ORDER: Record<OperationSeverity, number> = {
  */
 export class PolicyEngine {
   private config: PolicyConfig;
+  private patternCache: Map<string, RegExp> = new Map();
 
   constructor(config: PolicyConfig) {
     this.config = config;
+    this.compilePatterns();
   }
 
   /**
@@ -38,6 +40,37 @@ export class PolicyEngine {
    */
   public updateConfig(config: PolicyConfig): void {
     this.config = config;
+    this.compilePatterns();
+  }
+
+  /**
+   * Pre-compile regex patterns for performance.
+   */
+  private compilePatterns(): void {
+    this.patternCache.clear();
+    for (const rule of this.config.rules) {
+      if (rule.match.tool) {
+        if (!this.patternCache.has(rule.match.tool)) {
+          this.patternCache.set(rule.match.tool, this.compilePattern(rule.match.tool));
+        }
+      }
+      if (rule.match.action) {
+        if (!this.patternCache.has(rule.match.action)) {
+          this.patternCache.set(rule.match.action, this.compilePattern(rule.match.action));
+        }
+      }
+    }
+  }
+
+  /**
+   * Compile a wildcard pattern to a RegExp.
+   */
+  private compilePattern(pattern: string): RegExp {
+    const regexPattern = pattern
+      .split('*')
+      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      .join('.*');
+    return new RegExp(`^${regexPattern}$`, 'i');
   }
 
   /**
@@ -123,12 +156,16 @@ export class PolicyEngine {
    * Match a string against a pattern (supports * wildcard).
    */
   private matchesPattern(value: string, pattern: string): boolean {
-    // Convert wildcard pattern to regex
-    const regexPattern = pattern
-      .split('*')
-      .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-      .join('.*');
-    const regex = new RegExp(`^${regexPattern}$`, 'i');
+    let regex = this.patternCache.get(pattern);
+    
+    // Fallback for uncached patterns (e.g. if pattern didn't come from config traversal)
+    if (!regex) {
+      regex = this.compilePattern(pattern);
+      // We could cache this, but unbounded cache growth is a risk if pattern is user-provided
+      // Since pattern comes from policy config, it should have been cached.
+      // If it wasn't, it might be dynamically generated or I missed a spot.
+    }
+    
     return regex.test(value);
   }
 
