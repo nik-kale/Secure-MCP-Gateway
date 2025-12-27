@@ -22,6 +22,7 @@ import {
   isGatewayError,
   CallerIdentity,
   WebhookNotifier,
+  RedisApprovalStore,
 } from '@secure-mcp-gateway/core';
 import { authenticateRequest, AuthRequest } from './middleware/auth.js';
 import { approvalRoutes } from './routes/approvals.js';
@@ -65,6 +66,7 @@ const gatewayConfig: GatewayConfig = {
   policy: createDefaultPolicy(),
   approvalTTL: parseInt(process.env.APPROVAL_TTL || '3600000'), // 1 hour default
   webhookNotifier: webhookConfig ? new WebhookNotifier(webhookConfig) : undefined,
+  approvalStore: process.env.REDIS_URL ? new RedisApprovalStore(process.env.REDIS_URL) : undefined,
 };
 
 const gateway = new SecureMCPGateway(gatewayConfig);

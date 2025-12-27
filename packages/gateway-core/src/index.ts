@@ -16,6 +16,9 @@ export { AuditLogger, type IAuditLogger, type AuditLoggerConfig } from './audit-
 
 // Approval Manager
 export { ApprovalManager, type ApprovalManagerConfig } from './approval-manager.js';
+export { IApprovalStore } from './stores/approval-store.js';
+export { MemoryApprovalStore } from './stores/memory-approval-store.js';
+export { RedisApprovalStore } from './stores/redis-approval-store.js';
 
 // Webhook Notifier
 export { WebhookNotifier, type WebhookConfig } from './webhook-notifier.js';

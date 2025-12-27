@@ -7,6 +7,7 @@ import { PolicyEngine } from './policy-engine.js';
 import { AuditLogger, IAuditLogger } from './audit-logger.js';
 import { ApprovalManager } from './approval-manager.js';
 import { WebhookNotifier } from './webhook-notifier.js';
+import { IApprovalStore } from './stores/approval-store.js';
 import {
   ToolCallContext,
   PolicyDecision,
@@ -14,6 +15,7 @@ import {
   OperationSeverity,
   CallerIdentity,
   PolicyConfig,
+  PendingApproval,
 } from './types.js';
 
 /**
@@ -48,6 +50,8 @@ export interface GatewayConfig {
   approvalTTL?: number;
   /** Optional webhook notifier */
   webhookNotifier?: WebhookNotifier;
+  /** Optional approval store */
+  approvalStore?: IApprovalStore;
 }
 
 /**
@@ -67,6 +71,7 @@ export class SecureMCPGateway {
     this.approvalManager = new ApprovalManager({
       defaultTTL: config.approvalTTL,
       webhookNotifier: config.webhookNotifier,
+      store: config.approvalStore,
     });
   }
 
@@ -119,7 +124,7 @@ export class SecureMCPGateway {
 
       case PolicyEffect.REVIEW:
         // Create pending approval
-        const approval = this.approvalManager.createApproval(context, decision);
+        const approval = await this.approvalManager.createApproval(context, decision);
         return {
           allowed: false,
           decision,
@@ -194,7 +199,7 @@ export class SecureMCPGateway {
     approver: CallerIdentity,
     executor: () => Promise<T>
   ): Promise<GatewayCallResult> {
-    const result = this.approvalManager.grantApproval(approvalToken, approver);
+    const result = await this.approvalManager.grantApproval(approvalToken, approver);
 
     if (!result.success || !result.approval) {
       throw new Error(result.error || 'Failed to grant approval');
@@ -238,7 +243,7 @@ export class SecureMCPGateway {
    * Deny a pending approval.
    */
   public async denyApproval(approvalToken: string, denier: CallerIdentity): Promise<void> {
-    const result = this.approvalManager.denyApproval(approvalToken, denier);
+    const result = await this.approvalManager.denyApproval(approvalToken, denier);
 
     if (!result.success || !result.approval) {
       throw new Error(result.error || 'Failed to deny approval');
@@ -250,7 +255,7 @@ export class SecureMCPGateway {
   /**
    * List pending approvals.
    */
-  public listPendingApprovals() {
+  public async listPendingApprovals(): Promise<PendingApproval[]> {
     return this.approvalManager.listPendingApprovals();
   }
 

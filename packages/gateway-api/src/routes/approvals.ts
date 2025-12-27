@@ -13,8 +13,8 @@ export function approvalRoutes(gateway: SecureMCPGateway): Router {
    * GET /api/v1/approvals/pending
    * List all pending approvals
    */
-  router.get('/pending', (req: AuthRequest, res: Response) => {
-    const pending = gateway.listPendingApprovals();
+  router.get('/pending', async (req: AuthRequest, res: Response) => {
+    const pending = await gateway.listPendingApprovals();
     res.json({
       count: pending.length,
       approvals: pending.map(approval => ({
@@ -36,9 +36,9 @@ export function approvalRoutes(gateway: SecureMCPGateway): Router {
    * GET /api/v1/approvals/:token
    * Get details of a specific approval
    */
-  router.get('/:token', (req: AuthRequest, res: Response) => {
+  router.get('/:token', async (req: AuthRequest, res: Response) => {
     const { token } = req.params;
-    const approval = gateway.getApprovalManager().getApproval(token);
+    const approval = await gateway.getApprovalManager().getApproval(token);
 
     if (!approval) {
       throw new ApprovalNotFoundError(token);
@@ -71,14 +71,14 @@ export function approvalRoutes(gateway: SecureMCPGateway): Router {
     const approver = req.user!;
 
     // Get the approval to execute
-    const approval = gateway.getApprovalManager().getApproval(token);
+    const approval = await gateway.getApprovalManager().getApproval(token);
     if (!approval) {
       throw new ApprovalNotFoundError(token);
     }
 
     // The executor function would need to be stored or reconstructed
     // For now, we just approve without executing (execution happens separately)
-    const result = gateway.getApprovalManager().grantApproval(token, approver);
+    const result = await gateway.getApprovalManager().grantApproval(token, approver);
 
     if (!result.success) {
       return res.status(400).json({
@@ -123,9 +123,9 @@ export function approvalRoutes(gateway: SecureMCPGateway): Router {
    * GET /api/v1/approvals/stats
    * Get approval statistics
    */
-  router.get('/stats', (req: AuthRequest, res: Response) => {
+  router.get('/stats', async (req: AuthRequest, res: Response) => {
     const manager = gateway.getApprovalManager();
-    const pending = manager.listPendingApprovals();
+    const pending = await manager.listPendingApprovals();
 
     // Group by severity
     const bySeverity = pending.reduce((acc, approval) => {
