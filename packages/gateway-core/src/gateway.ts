@@ -8,6 +8,7 @@ import { AuditLogger, IAuditLogger } from './audit-logger.js';
 import { ApprovalManager } from './approval-manager.js';
 import { WebhookNotifier } from './webhook-notifier.js';
 import { IApprovalStore } from './stores/approval-store.js';
+import { ExecutionTimeoutError } from './errors.js';
 import {
   ToolCallContext,
   PolicyDecision,
@@ -52,6 +53,8 @@ export interface GatewayConfig {
   webhookNotifier?: WebhookNotifier;
   /** Optional approval store */
   approvalStore?: IApprovalStore;
+  /** Default execution timeout in milliseconds (default: 30000) */
+  defaultTimeout?: number;
 }
 
 /**
@@ -64,6 +67,7 @@ export class SecureMCPGateway {
   private policyEngine: PolicyEngine;
   private auditLogger: IAuditLogger;
   private approvalManager: ApprovalManager;
+  private defaultTimeout: number;
 
   constructor(config: GatewayConfig) {
     this.policyEngine = new PolicyEngine(config.policy);
@@ -73,6 +77,7 @@ export class SecureMCPGateway {
       webhookNotifier: config.webhookNotifier,
       store: config.approvalStore,
     });
+    this.defaultTimeout = config.defaultTimeout || 30000;
   }
 
   /**
@@ -149,15 +154,17 @@ export class SecureMCPGateway {
    * @param executor Function that executes the tool and returns the result
    * @param args Tool arguments (optional)
    * @param metadata Additional metadata (optional)
+   * @param options Execution options
    */
   public async executeToolCall<T = unknown>(
     tool: string,
     action: string,
     severity: OperationSeverity,
     caller: CallerIdentity,
-    executor: () => Promise<T>,
+    executor: (signal?: AbortSignal) => Promise<T>,
     args?: Record<string, unknown>,
-    metadata?: Record<string, unknown>
+    metadata?: Record<string, unknown>,
+    options?: { timeout?: number }
   ): Promise<GatewayCallResult> {
     const evalResult = await this.evaluateToolCall(tool, action, severity, caller, args, metadata);
 
@@ -165,9 +172,28 @@ export class SecureMCPGateway {
       return evalResult;
     }
 
+    const timeout = options?.timeout ?? this.defaultTimeout;
+    const controller = new AbortController();
+    
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, timeout);
+
     // Execute the tool
     try {
-      const output = await executor();
+      const output = await Promise.race([
+        executor(controller.signal),
+        new Promise<never>((_, reject) => {
+            if (controller.signal.aborted) {
+                reject(new ExecutionTimeoutError(timeout, { tool, action }));
+            }
+            controller.signal.addEventListener('abort', () => {
+                reject(new ExecutionTimeoutError(timeout, { tool, action }));
+            });
+        })
+      ]);
+      
+      clearTimeout(timeoutId);
       await this.auditLogger.logExecutionSuccess(evalResult.context, output);
 
       return {
@@ -178,8 +204,14 @@ export class SecureMCPGateway {
         },
       };
     } catch (error) {
+      clearTimeout(timeoutId);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      await this.auditLogger.logExecutionFailure(evalResult.context, errorMessage);
+      
+      if (error instanceof ExecutionTimeoutError) {
+          await this.auditLogger.logExecutionFailure(evalResult.context, `Timeout: ${errorMessage}`);
+      } else {
+          await this.auditLogger.logExecutionFailure(evalResult.context, errorMessage);
+      }
 
       return {
         ...evalResult,
@@ -197,7 +229,8 @@ export class SecureMCPGateway {
   public async grantApprovalAndExecute<T = unknown>(
     approvalToken: string,
     approver: CallerIdentity,
-    executor: () => Promise<T>
+    executor: (signal?: AbortSignal) => Promise<T>,
+    options?: { timeout?: number }
   ): Promise<GatewayCallResult> {
     const result = await this.approvalManager.grantApproval(approvalToken, approver);
 
@@ -209,9 +242,28 @@ export class SecureMCPGateway {
 
     await this.auditLogger.logApprovalGranted(context, approver);
 
+    const timeout = options?.timeout ?? this.defaultTimeout;
+    const controller = new AbortController();
+    
+    const timeoutId = setTimeout(() => {
+        controller.abort();
+    }, timeout);
+
     // Execute the tool
     try {
-      const output = await executor();
+      const output = await Promise.race([
+        executor(controller.signal),
+         new Promise<never>((_, reject) => {
+            if (controller.signal.aborted) {
+                reject(new ExecutionTimeoutError(timeout, { tool: context.tool, action: context.action }));
+            }
+            controller.signal.addEventListener('abort', () => {
+                reject(new ExecutionTimeoutError(timeout, { tool: context.tool, action: context.action }));
+            });
+        })
+      ]);
+      clearTimeout(timeoutId);
+
       await this.auditLogger.logExecutionSuccess(context, output);
 
       return {
@@ -224,6 +276,7 @@ export class SecureMCPGateway {
         },
       };
     } catch (error) {
+      clearTimeout(timeoutId);
       const errorMessage = error instanceof Error ? error.message : String(error);
       await this.auditLogger.logExecutionFailure(context, errorMessage);
 
