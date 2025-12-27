@@ -9,6 +9,7 @@ import { ApprovalManager } from './approval-manager.js';
 import { WebhookNotifier } from './webhook-notifier.js';
 import { IApprovalStore } from './stores/approval-store.js';
 import { ExecutionTimeoutError } from './errors.js';
+import { withTracing } from './telemetry.js';
 import {
   ToolCallContext,
   PolicyDecision,
@@ -94,52 +95,54 @@ export class SecureMCPGateway {
     args?: Record<string, unknown>,
     metadata?: Record<string, unknown>
   ): Promise<GatewayCallResult> {
-    const context: ToolCallContext = {
-      callId: uuidv4(),
-      tool,
-      action,
-      severity,
-      caller,
-      args,
-      timestamp: new Date(),
-      metadata,
-    };
+    return withTracing('evaluateToolCall', async () => {
+      const context: ToolCallContext = {
+        callId: uuidv4(),
+        tool,
+        action,
+        severity,
+        caller,
+        args,
+        timestamp: new Date(),
+        metadata,
+      };
 
-    // Evaluate policy
-    const decision = this.policyEngine.evaluatePolicy(context);
+      // Evaluate policy
+      const decision = this.policyEngine.evaluatePolicy(context);
 
-    // Log the tool call and decision
-    await this.auditLogger.logToolCall(context, decision);
+      // Log the tool call and decision
+      await this.auditLogger.logToolCall(context, decision);
 
-    // Handle based on policy decision
-    switch (decision.effect) {
-      case PolicyEffect.ALLOW:
-        return {
-          allowed: true,
-          decision,
-          context,
-        };
+      // Handle based on policy decision
+      switch (decision.effect) {
+        case PolicyEffect.ALLOW:
+          return {
+            allowed: true,
+            decision,
+            context,
+          };
 
-      case PolicyEffect.DENY:
-        return {
-          allowed: false,
-          decision,
-          context,
-        };
+        case PolicyEffect.DENY:
+          return {
+            allowed: false,
+            decision,
+            context,
+          };
 
-      case PolicyEffect.REVIEW:
-        // Create pending approval
-        const approval = await this.approvalManager.createApproval(context, decision);
-        return {
-          allowed: false,
-          decision,
-          approvalToken: approval.token,
-          context,
-        };
+        case PolicyEffect.REVIEW:
+          // Create pending approval
+          const approval = await this.approvalManager.createApproval(context, decision);
+          return {
+            allowed: false,
+            decision,
+            approvalToken: approval.token,
+            context,
+          };
 
-      default:
-        throw new Error(`Unknown policy effect: ${decision.effect}`);
-    }
+        default:
+          throw new Error(`Unknown policy effect: ${decision.effect}`);
+      }
+    }, { tool, action, severity, caller: caller.id });
   }
 
   /**
@@ -166,61 +169,63 @@ export class SecureMCPGateway {
     metadata?: Record<string, unknown>,
     options?: { timeout?: number }
   ): Promise<GatewayCallResult> {
-    const evalResult = await this.evaluateToolCall(tool, action, severity, caller, args, metadata);
+    return withTracing('executeToolCall', async () => {
+      const evalResult = await this.evaluateToolCall(tool, action, severity, caller, args, metadata);
 
-    if (!evalResult.allowed) {
-      return evalResult;
-    }
-
-    const timeout = options?.timeout ?? this.defaultTimeout;
-    const controller = new AbortController();
-    
-    const timeoutId = setTimeout(() => {
-        controller.abort();
-    }, timeout);
-
-    // Execute the tool
-    try {
-      const output = await Promise.race([
-        executor(controller.signal),
-        new Promise<never>((_, reject) => {
-            if (controller.signal.aborted) {
-                reject(new ExecutionTimeoutError(timeout, { tool, action }));
-            }
-            controller.signal.addEventListener('abort', () => {
-                reject(new ExecutionTimeoutError(timeout, { tool, action }));
-            });
-        })
-      ]);
-      
-      clearTimeout(timeoutId);
-      await this.auditLogger.logExecutionSuccess(evalResult.context, output);
-
-      return {
-        ...evalResult,
-        result: {
-          success: true,
-          output,
-        },
-      };
-    } catch (error) {
-      clearTimeout(timeoutId);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      
-      if (error instanceof ExecutionTimeoutError) {
-          await this.auditLogger.logExecutionFailure(evalResult.context, `Timeout: ${errorMessage}`);
-      } else {
-          await this.auditLogger.logExecutionFailure(evalResult.context, errorMessage);
+      if (!evalResult.allowed) {
+        return evalResult;
       }
 
-      return {
-        ...evalResult,
-        result: {
-          success: false,
-          error: errorMessage,
-        },
-      };
-    }
+      const timeout = options?.timeout ?? this.defaultTimeout;
+      const controller = new AbortController();
+      
+      const timeoutId = setTimeout(() => {
+          controller.abort();
+      }, timeout);
+
+      // Execute the tool
+      try {
+        const output = await Promise.race([
+          executor(controller.signal),
+          new Promise<never>((_, reject) => {
+              if (controller.signal.aborted) {
+                  reject(new ExecutionTimeoutError(timeout, { tool, action }));
+              }
+              controller.signal.addEventListener('abort', () => {
+                  reject(new ExecutionTimeoutError(timeout, { tool, action }));
+              });
+          })
+        ]);
+        
+        clearTimeout(timeoutId);
+        await this.auditLogger.logExecutionSuccess(evalResult.context, output);
+
+        return {
+          ...evalResult,
+          result: {
+            success: true,
+            output,
+          },
+        };
+      } catch (error) {
+        clearTimeout(timeoutId);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        
+        if (error instanceof ExecutionTimeoutError) {
+            await this.auditLogger.logExecutionFailure(evalResult.context, `Timeout: ${errorMessage}`);
+        } else {
+            await this.auditLogger.logExecutionFailure(evalResult.context, errorMessage);
+        }
+
+        return {
+          ...evalResult,
+          result: {
+            success: false,
+            error: errorMessage,
+          },
+        };
+      }
+    }, { tool, action, severity, caller: caller.id });
   }
 
   /**
@@ -232,64 +237,66 @@ export class SecureMCPGateway {
     executor: (signal?: AbortSignal) => Promise<T>,
     options?: { timeout?: number }
   ): Promise<GatewayCallResult> {
-    const result = await this.approvalManager.grantApproval(approvalToken, approver);
+    return withTracing('grantApprovalAndExecute', async () => {
+      const result = await this.approvalManager.grantApproval(approvalToken, approver);
 
-    if (!result.success || !result.approval) {
-      throw new Error(result.error || 'Failed to grant approval');
-    }
+      if (!result.success || !result.approval) {
+        throw new Error(result.error || 'Failed to grant approval');
+      }
 
-    const { context } = result.approval;
+      const { context } = result.approval;
 
-    await this.auditLogger.logApprovalGranted(context, approver);
+      await this.auditLogger.logApprovalGranted(context, approver);
 
-    const timeout = options?.timeout ?? this.defaultTimeout;
-    const controller = new AbortController();
-    
-    const timeoutId = setTimeout(() => {
-        controller.abort();
-    }, timeout);
+      const timeout = options?.timeout ?? this.defaultTimeout;
+      const controller = new AbortController();
+      
+      const timeoutId = setTimeout(() => {
+          controller.abort();
+      }, timeout);
 
-    // Execute the tool
-    try {
-      const output = await Promise.race([
-        executor(controller.signal),
-         new Promise<never>((_, reject) => {
-            if (controller.signal.aborted) {
-                reject(new ExecutionTimeoutError(timeout, { tool: context.tool, action: context.action }));
-            }
-            controller.signal.addEventListener('abort', () => {
-                reject(new ExecutionTimeoutError(timeout, { tool: context.tool, action: context.action }));
-            });
-        })
-      ]);
-      clearTimeout(timeoutId);
+      // Execute the tool
+      try {
+        const output = await Promise.race([
+          executor(controller.signal),
+          new Promise<never>((_, reject) => {
+              if (controller.signal.aborted) {
+                  reject(new ExecutionTimeoutError(timeout, { tool: context.tool, action: context.action }));
+              }
+              controller.signal.addEventListener('abort', () => {
+                  reject(new ExecutionTimeoutError(timeout, { tool: context.tool, action: context.action }));
+              });
+          })
+        ]);
+        clearTimeout(timeoutId);
 
-      await this.auditLogger.logExecutionSuccess(context, output);
+        await this.auditLogger.logExecutionSuccess(context, output);
 
-      return {
-        allowed: true,
-        decision: result.approval.decision,
-        context,
-        result: {
-          success: true,
-          output,
-        },
-      };
-    } catch (error) {
-      clearTimeout(timeoutId);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      await this.auditLogger.logExecutionFailure(context, errorMessage);
+        return {
+          allowed: true,
+          decision: result.approval.decision,
+          context,
+          result: {
+            success: true,
+            output,
+          },
+        };
+      } catch (error) {
+        clearTimeout(timeoutId);
+        const errorMessage = error instanceof Error ? error.message : String(error);
+        await this.auditLogger.logExecutionFailure(context, errorMessage);
 
-      return {
-        allowed: true,
-        decision: result.approval.decision,
-        context,
-        result: {
-          success: false,
-          error: errorMessage,
-        },
-      };
-    }
+        return {
+          allowed: true,
+          decision: result.approval.decision,
+          context,
+          result: {
+            success: false,
+            error: errorMessage,
+          },
+        };
+      }
+    }, { approvalToken, approver: approver.id });
   }
 
   /**
