@@ -162,6 +162,8 @@ export interface PendingApproval {
   expiresAt?: Date;
   /** Current status */
   status: 'pending' | 'approved' | 'denied' | 'expired';
+  /** Additional metadata for tracking state (e.g. escalation level) */
+  metadata?: Record<string, unknown>;
 }
 
 /**
@@ -174,4 +176,35 @@ export interface ApprovalResult {
   approval?: PendingApproval;
   /** Error message if unsuccessful */
   error?: string;
+}
+
+/**
+ * Escalation tier definition.
+ */
+export interface EscalationTier {
+  /** Minutes after creation to trigger this escalation level */
+  afterMinutes: number;
+  /** Channels to notify (e.g. webhook URLs or channel IDs) */
+  notifyChannels: string[];
+  /** Additional approvers allowed at this tier (optional) */
+  allowApprovers?: string[];
+  /** Custom message for escalation notification */
+  escalationMessage?: string;
+}
+
+/**
+ * Escalation policy configuration.
+ */
+export interface EscalationPolicy {
+  /** Unique ID for this escalation policy */
+  id: string;
+  /** Matching criteria for applying this policy */
+  match: {
+    /** Minimum severity to match */
+    minSeverity?: OperationSeverity;
+    /** Action pattern to match */
+    action?: string;
+  };
+  /** Ordered list of escalation tiers */
+  tiers: EscalationTier[];
 }
