@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  gateway:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      - REDIS_URL=redis://redis:6379
+      - LOG_LEVEL=info
+      - APPROVAL_TTL=3600000
+    depends_on:
+      - redis
+    networks:
+      - smcp-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - smcp-network
+
+networks:
+  smcp-network:
+    driver: bridge
+
+volumes:
+  redis-data:
+
